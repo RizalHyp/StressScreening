@@ -78,9 +78,6 @@ footer .adm{margin-top:12px;background:rgba(255,255,255,.18);color:#fff;border:1
 .bgs button{height:70px;border-radius:14px;border:2px solid transparent;cursor:pointer;background-size:cover;background-position:center;color:#fff;font:inherit;font-size:12px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.6)}
 .bgs button.on{border-color:#fff;outline:3px solid var(--accent)}
 #dew{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
-.mus{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:10;font:inherit;font-size:13px;font-weight:600;color:#fff;background:rgba(20,45,38,.62);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.5);border-radius:99px;padding:9px 16px;cursor:pointer}
-.mus:not(.on){animation:pulse 2.4s ease-in-out infinite}
-@keyframes pulse{50%{box-shadow:0 0 0 8px rgba(255,255,255,.14)}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -141,7 +138,6 @@ Hipnoterapis tersertifikasi CH &amp; CHt<br>© Rizal Hypno Center since 2015<br>
 </footer>
 </div>
 
-<button class="mus" id="mus" aria-pressed="false">Ketuk untuk musik</button>
 <div id="ov" class="hidden" role="dialog" aria-modal="true" aria-label="Menu admin">
 <div class="card">
 <div id="a-login">
@@ -336,61 +332,31 @@ size();addEventListener("resize",function(){size();if(still)redraw()});
 if(still)redraw();else requestAnimationFrame(frame)
 })();
 
-/* musik relaksasi (disintesis langsung di browser, tanpa file audio) */
+/* musik latar: file musik.mp3, diputar mulus (crossfade antar putaran), volume naik bertahap */
 (function(){
-var AC=null,M=null,RV=null,DRY=null,on=false,want=true,tm=null,tc=null,wasOn=false,btn=$("mus"),EV=["pointerdown","keydown","touchend"];
-try{want=localStorage.getItem("rhc_music")!=="off"}catch(e){}
-function rnd(a,b){return a+Math.random()*(b-a)}
-function mtof(n){return 440*Math.pow(2,(n-69)/12)}
-function send(n){n.connect(DRY);n.connect(RV)}
-function build(){
- var C=window.AudioContext||window.webkitAudioContext;if(!C)return false;
- AC=new C();M=AC.createGain();M.gain.value=0;
- var lp=AC.createBiquadFilter();lp.type="lowpass";lp.frequency.value=1800;
- RV=AC.createConvolver();var len=Math.floor(AC.sampleRate*3.5),ir=AC.createBuffer(2,len,AC.sampleRate);
- for(var c=0;c<2;c++){var d=ir.getChannelData(c);for(var k=0;k<len;k++)d[k]=(Math.random()*2-1)*Math.pow(1-k/len,2.6)}
- RV.buffer=ir;var wet=AC.createGain();wet.gain.value=.7;RV.connect(wet);wet.connect(lp);
- DRY=AC.createGain();DRY.gain.value=.5;DRY.connect(lp);lp.connect(M);M.connect(AC.destination);
- var nb=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate),nd=nb.getChannelData(0);for(var j=0;j<nd.length;j++)nd[j]=Math.random()*2-1;
- var ns=AC.createBufferSource();ns.buffer=nb;ns.loop=true;
- var bp=AC.createBiquadFilter();bp.type="bandpass";bp.frequency.value=2200;bp.Q.value=.5;
- var ng=AC.createGain();ng.gain.value=.012;ns.connect(bp);bp.connect(ng);ng.connect(M);ns.start();return true}
-var CH=[[48,55,64,71],[45,52,60,67],[41,48,57,64],[43,50,59,64]],ci=0;
-function chord(){
- if(!on)return;var t=AC.currentTime+.05,n=CH[ci++%CH.length];
- n.forEach(function(m,k){[0,4].forEach(function(det){
-  var o=AC.createOscillator(),g=AC.createGain();o.type=k%2?"triangle":"sine";o.frequency.value=mtof(m);o.detune.value=det;
-  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.05,t+3.5);g.gain.linearRampToValueAtTime(.0001,t+13);
-  o.connect(g);send(g);o.start(t);o.stop(t+13.2)})});
- tm=setTimeout(chord,10000)}
-function chime(){
- if(!on)return;var sc=[72,74,76,79,81,84],m=sc[Math.floor(Math.random()*sc.length)],t=AC.currentTime+.05,o=AC.createOscillator(),g=AC.createGain();
- o.type="sine";o.frequency.value=mtof(m);
- g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.045,t+.03);g.gain.exponentialRampToValueAtTime(.0001,t+3.5);
- o.connect(g);send(g);o.start(t);o.stop(t+3.6);tc=setTimeout(chime,rnd(2500,6500))}
-function ui(){btn.classList.toggle("on",on);btn.setAttribute("aria-pressed",on?"true":"false");btn.textContent=on?"Musik: nyala":(want?"Ketuk untuk musik":"Musik: mati")}
-function gesture(e){if(e.target&&e.target.closest&&e.target.closest("#mus"))return;if(want&&!on)start()}
-function start(){
- want=true;try{localStorage.setItem("rhc_music","on")}catch(e){}
- if(!AC&&!build())return;
+var C=window.AudioContext||window.webkitAudioContext;if(!C)return;
+var SRC="musik.mp3",XF=3,AC=new C(),G=AC.createGain(),buf=null,started=false,nextAt=0,EV=["pointerdown","touchend","click","keydown"];
+G.gain.value=0;G.connect(AC.destination);
+function layer(t){
+ var s=AC.createBufferSource(),g=AC.createGain(),d=buf.duration;s.buffer=buf;
+ g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(1,t+XF);
+ g.gain.setValueAtTime(1,t+d-XF);g.gain.linearRampToValueAtTime(0,t+d);
+ s.connect(g);g.connect(G);s.start(t);nextAt=t+d-XF}
+function go(){
+ if(started||!buf)return;
  AC.resume().then(function(){
-  if(AC.state!=="running"||on)return;on=true;
-  EV.forEach(function(n){removeEventListener(n,gesture,true)});
-  M.gain.cancelScheduledValues(AC.currentTime);M.gain.setValueAtTime(M.gain.value,AC.currentTime);M.gain.linearRampToValueAtTime(.55,AC.currentTime+4);
-  clearTimeout(tm);clearTimeout(tc);chord();tc=setTimeout(chime,2500);ui()}).catch(function(){})}
-function stop(save){
- if(save){want=false;try{localStorage.setItem("rhc_music","off")}catch(e){}}
- if(!AC||!on){ui();return}
- on=false;clearTimeout(tm);clearTimeout(tc);
- M.gain.cancelScheduledValues(AC.currentTime);M.gain.setValueAtTime(M.gain.value,AC.currentTime);M.gain.linearRampToValueAtTime(0,AC.currentTime+1.2);
- setTimeout(function(){if(!on)AC.suspend()},1400);ui()}
-btn.onclick=function(){on?stop(true):start()};
+  if(started||AC.state!=="running")return;started=true;
+  EV.forEach(function(n){removeEventListener(n,gest,true)});
+  var t=AC.currentTime+.1;
+  G.gain.setValueAtTime(.05,t);G.gain.linearRampToValueAtTime(.35,t+15);G.gain.linearRampToValueAtTime(.85,t+195);
+  layer(t);setInterval(function(){if(AC.currentTime>nextAt-6)layer(nextAt)},400)}).catch(function(){})}
+function gest(){AC.resume().catch(function(){});go()}
+EV.forEach(function(n){addEventListener(n,gest,true)});
+fetch(SRC).then(function(r){if(!r.ok)throw 0;return r.arrayBuffer()})
+ .then(function(b){return new Promise(function(ok,no){AC.decodeAudioData(b,ok,no)})})
+ .then(function(d){buf=d;go()}).catch(function(){});
 document.addEventListener("visibilitychange",function(){
- if(!AC)return;
- if(document.hidden){if(on){wasOn=true;stop(false)}}
- else if(wasOn&&want){wasOn=false;start()}});
-ui();
-if(want){EV.forEach(function(n){addEventListener(n,gesture,true)});start()}
+ if(document.hidden){AC.suspend().catch(function(){})}else if(started){AC.resume().catch(function(){})}})
 })();
 </script>
 </body>
