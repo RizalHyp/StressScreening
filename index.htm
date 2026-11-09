@@ -97,7 +97,6 @@ footer .adm{margin-top:12px;background:rgba(255,255,255,.18);color:#fff;border:1
 <input id="nama" type="text" autocomplete="given-name" maxlength="40" placeholder="Nama panggilan">
 <label class="l" for="umur">Umur</label>
 <input id="umur" type="number" inputmode="numeric" min="5" max="100" placeholder="Contoh: 27">
-<label class="chk"><input type="checkbox" id="ok"><span>Saya setuju nama, umur, dan hasil screening saya dicatat oleh Rizal Hypno Center untuk keperluan konsultasi.</span></label>
 <p class="err" id="err" role="alert"></p>
 <button class="btn primary" id="go">Mulai tes</button>
 <div class="note"><b>Disklaimer.</b> Ini alat screening mandiri, bukan diagnosis. Jika kamu butuh penanganan ahli segera, hubungi kami atau tenaga medis terdekat.</div>
@@ -222,7 +221,6 @@ $("go").onclick=function(){
  var n=$("nama").value.trim(),u=parseInt($("umur").value,10);
  if(!n){$("err").textContent="Isi nama dulu ya.";return}
  if(!u||u<5||u>100){$("err").textContent="Isi umur dengan angka antara 5 dan 100.";return}
- if(!$("ok").checked){$("err").textContent="Centang persetujuan pencatatan data untuk melanjutkan.";return}
  $("err").textContent="";nama=n;umur=u;i=0;a=[];render();show("s-quiz")};
 function render(){
  $("qn").textContent="Pertanyaan "+(i+1)+" dari "+Q.length;
@@ -249,7 +247,7 @@ function result(){
  var all=ls(LS,[]);all.push(rec);lsw(LS,all);
  if(DB){DB.collection("hasil").doc(rec.id).set(rec).catch(function(){})}
  show("s-res")}
-$("again").onclick=function(){$("nama").value="";$("umur").value="";$("ok").checked=false;show("s-start")};
+$("again").onclick=function(){$("nama").value="";$("umur").value="";show("s-start")};
 
 /* admin */
 var ov=$("ov");
