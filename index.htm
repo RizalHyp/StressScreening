@@ -152,7 +152,8 @@ Hipnoterapis tersertifikasi CH &amp; CHt<br>© Rizal Hypno Center since 2015<br>
 <div class="tabs"><button class="tab on" data-tab="t-data">Hasil screening</button><button class="tab" data-tab="t-bg">Latar belakang</button></div>
 <div id="t-data">
 <div class="sum"><div><b id="n-all">0</b>Total</div><div><b id="n-low">0</b>Rendah</div><div><b id="n-mid">0</b>Sedang</div><div><b id="n-high">0</b>Tinggi</div></div>
-<p class="mute" style="font-size:13px" id="src"></p>
+<p class="mute" style="font-size:13px;margin-bottom:8px" id="src"></p>
+<button class="btn ghost small" id="rf" style="margin-bottom:6px">Muat ulang</button>
 <div id="list"></div>
 </div>
 <div id="t-bg" class="hidden">
@@ -184,7 +185,7 @@ var Q=["Seberapa sering kamu merasa kewalahan oleh hal-hal yang harus dikerjakan
 "Seberapa sering kamu merasa menarik diri atau malas bertemu orang?"];
 var O=["Tidak pernah","Jarang","Kadang-kadang","Sering","Hampir selalu"];
 var ADMIN_PW="1991",LS="rhc_hasil_v1",LB="rhc_bg_v1";
-var nama="",umur=0,i=0,a=[],DB=null,bgNow="foto";
+var nama="",umur=0,i=0,a=[],bgNow="foto";
 var $=function(id){return document.getElementById(id)};
 function show(id){["s-start","s-quiz","s-res"].forEach(function(s){$(s).classList.toggle("hidden",s!==id)});window.scrollTo(0,0)}
 function ls(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}}
@@ -197,7 +198,7 @@ function dewSrc(src){dewImg=null;if(!src)return;var im=new Image();im.onload=fun
 function setBg(s,save){
  var v=s.t==="custom"?"url("+s.v+")":(PRE.filter(function(p){return p.id===s.v})[0]||PRE[0]).v;
  $("bg").style.backgroundImage=v;bgNow=s.t==="custom"?"custom":s.v;dewSrc(s.t==="custom"?s.v:(s.v==="foto"?PHOTO:null));
- if(save){lsw(LB,s);if(DB&&(s.v||"").length<200000){DB.doc("pengaturan/latar").set(s).catch(function(){})}}
+ if(save)lsw(LB,s);
  markBg()}
 function markBg(){document.querySelectorAll("#presets button").forEach(function(b){b.classList.toggle("on",b.dataset.id===bgNow)})}
 setBg(ls(LB,{t:"preset",v:"foto"}),false);
@@ -212,9 +213,20 @@ $("up").onchange=function(e){
   im.onerror=function(){$("uerr").textContent="File tidak bisa dibuka. Coba foto lain (JPG atau PNG)."};im.src=r.result};
  r.readAsDataURL(f)};
 
-/* penyimpanan bersama (bila tersedia) */
-if(window.claude&&claude.use){claude.use("db").then(function(d){DB=d;if(!d)return;
- d.doc("pengaturan/latar").get().then(function(s){if(s&&s.exists){var x=s.data();if(x&&x.v)setBg(x,false)}}).catch(function(){})}).catch(function(){})}
+/* penyimpanan hasil: Google Sheet lewat Google Apps Script */
+var API_URL="https://script.google.com/macros/s/AKfycbxN_VJ6KmuZL4c2c6cphRnrMayEV0oCtFK9NUr6s7rf-fkTsKbnoS3USuiI__lM2Au-/exec";/* <-- tempel URL Web App Apps Script (berakhiran /exec) di antara tanda kutip */
+var QK="rhc_antri_v1",pwAdm="",flushing=false;
+function api(o){return fetch(API_URL,{method:"POST",body:JSON.stringify(o)}).then(function(r){return r.json()})}
+function kirim(rec){
+ if(!API_URL){var all=ls(LS,[]);all.push(rec);lsw(LS,all);return}
+ var q=ls(QK,[]);q.push(rec);lsw(QK,q);flush()}
+function flush(){
+ var q=ls(QK,[]);if(!q.length||flushing||!API_URL)return;flushing=true;var cur=q[0];
+ api({aksi:"simpan",data:cur}).then(function(r){
+  if(!r||!r.ok)throw 0;
+  lsw(QK,ls(QK,[]).filter(function(x){return x.id!==cur.id}));flushing=false;flush()})
+ .catch(function(){flushing=false;setTimeout(flush,15000)})}
+if(API_URL)flush();
 
 /* tes */
 $("go").onclick=function(){
@@ -244,8 +256,7 @@ function result(){
  var m=encodeURIComponent("Halo Rizal Hypno Center, saya "+nama+" ("+umur+" th). Hasil screening stres saya: "+C[0]+" (skor "+s+"/40). Saya ingin konsultasi dulu.");
  $("wa1").href="https://wa.me/6283189363663?text="+m;$("wa2").href="https://wa.me/6285647229950?text="+m;
  var rec={id:"h"+Date.now()+Math.random().toString(36).slice(2,6),nama:nama,umur:umur,skor:s,kat:C[2],ts:Date.now()};
- var all=ls(LS,[]);all.push(rec);lsw(LS,all);
- if(DB){DB.collection("hasil").doc(rec.id).set(rec).catch(function(){})}
+ kirim(rec);
  show("s-res")}
 $("again").onclick=function(){$("nama").value="";$("umur").value="";show("s-start")};
 
@@ -258,17 +269,24 @@ document.querySelectorAll("[data-close]").forEach(function(b){b.onclick=closeAdm
 $("out").onclick=closeAdm;
 $("pw").onkeydown=function(e){if(e.key==="Enter")$("pgo").click()};
 $("pgo").onclick=function(){
- if($("pw").value!==ADMIN_PW){$("perr").textContent="Password salah.";return}
- $("a-login").classList.add("hidden");$("a-panel").classList.remove("hidden");markBg();loadData()};
+ var p=$("pw").value;$("perr").textContent="";
+ if(!API_URL){if(p!==ADMIN_PW){$("perr").textContent="Password salah.";return}pwAdm=p;openPanel();return}
+ $("pgo").disabled=true;
+ api({aksi:"daftar",pw:p}).then(function(r){
+  $("pgo").disabled=false;
+  if(!r||!r.ok){$("perr").textContent=(r&&r.err==="pw")?"Password salah.":"Server tidak merespons dengan benar.";return}
+  pwAdm=p;openPanel();draw(r.rows,"Data dari Google Sheet.")})
+ .catch(function(){$("pgo").disabled=false;$("perr").textContent="Gagal terhubung ke server. Periksa koneksi atau URL Apps Script."})};
+function openPanel(){$("a-login").classList.add("hidden");$("a-panel").classList.remove("hidden");markBg();if(!API_URL)loadData()}
+$("rf").onclick=function(){loadData()};
 document.querySelectorAll(".tab").forEach(function(b){b.onclick=function(){
  document.querySelectorAll(".tab").forEach(function(x){x.classList.toggle("on",x===b)});
  ["t-data","t-bg"].forEach(function(id){$(id).classList.toggle("hidden",id!==b.dataset.tab)})}});
 function loadData(){
- var local=ls(LS,[]);
- if(DB){DB.collection("hasil").orderBy("ts","desc").get().then(function(q){
-  draw(q.docs.map(function(d){return d.data()}),"Data dari penyimpanan bersama.")})
-  .catch(function(){draw(local.slice().reverse(),"Penyimpanan bersama tidak bisa dibaca. Menampilkan data dari perangkat ini saja.")})}
- else draw(local.slice().reverse(),"Menampilkan data yang tercatat di perangkat ini saja.")}
+ if(!API_URL){draw(ls(LS,[]).slice().reverse(),"URL server belum diisi, jadi hanya menampilkan data dari perangkat ini.");return}
+ $("src").textContent="Memuat…";
+ api({aksi:"daftar",pw:pwAdm}).then(function(r){if(!r||!r.ok)throw 0;draw(r.rows,"Data dari Google Sheet.")})
+ .catch(function(){$("src").textContent="Gagal memuat data. Periksa koneksi lalu tekan Muat ulang."})}
 function draw(rows,src){
  $("src").textContent=src;
  var c={low:0,mid:0,high:0};rows.forEach(function(r){if(c[r.kat]!==undefined)c[r.kat]++});
@@ -285,9 +303,9 @@ function draw(rows,src){
   var C=cat(r.skor),b=document.createElement("span");b.className="badge";b.style.background=C[1];b.textContent=r.skor+"/40 · "+C[0].replace("Stres ","");
   var x=document.createElement("button");x.className="x";x.textContent="Hapus";
   x.onclick=function(){
-   lsw(LS,ls(LS,[]).filter(function(y){return y.id!==r.id}));
-   if(DB){DB.collection("hasil").doc(r.id).delete().catch(function(){})}
-   loadData()};
+   if(x.dataset.s!=="1"){x.dataset.s="1";x.textContent="Yakin hapus?";return}
+   if(API_URL){api({aksi:"hapus",pw:pwAdm,id:r.id}).then(function(){loadData()}).catch(function(){$("src").textContent="Gagal menghapus. Coba lagi."})}
+   else{lsw(LS,ls(LS,[]).filter(function(y){return y.id!==r.id}));loadData()}};
   rr.appendChild(b);rr.appendChild(x);row.appendChild(l);row.appendChild(rr);L.appendChild(row)})}
 
 /* embun basah */
